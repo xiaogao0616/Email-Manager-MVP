@@ -1,0 +1,8 @@
+# 忽略谷歌 API 秘钥和令牌
+credentials.json
+token.json
+emails.json
+
+# 忽略 Python 缓存
+__pycache__/
+.env
