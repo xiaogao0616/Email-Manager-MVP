@@ -4,8 +4,8 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 # 核心：定义你的应用需要什么权限。
-# readonly 表示我们现在只读取邮件，不修改不删除，最安全。
-SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+# 将 readonly 改为 modify，允许读取和修改邮件标签状态
+SCOPES = ['https://www.googleapis.com/auth/gmail.modify']
 
 def main():
     creds = None

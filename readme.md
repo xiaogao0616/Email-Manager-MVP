@@ -1,47 +1,103 @@
-# 📬 Email Manager Desktop (MVP)
+# Inbox Zero AI
 
-用 Python + Streamlit 做的一个小型 Gmail 收件箱查看器：拉取最近几封邮件，缓存到本地 `emails.json`，然后在网页里展示（支持一键刷新）。
+> AI-native Gmail triage — built for the **Code With Gemini** hackathon.
 
-## 功能
-- 展示最近邮件列表（发件人 / 主题 / 日期）
-- 展示每封邮件的摘要
-- 点击「🔄 刷新收件箱」后重新拉取并自动刷新页面
-- 本地缓存 `emails.json`，避免每次打开都请求 API
+Inbox Zero connects to your Gmail inbox, runs every unread email through **Gemini 2.5 Flash**, and automatically decides what to keep and what to archive — so you never waste time on newsletters, job spam, or platform notifications again.
 
-## 技术栈
-- Python 3.9+
-- Streamlit
-- Gmail API v1（Google API Python Client）
-- OAuth 2.0（本地 `token.json`）
+## Architecture
 
-## 快速开始
-### 1) 准备 Google 凭证
-在 Google Cloud Console 创建 OAuth Client（Desktop app），下载 `credentials.json` 放到项目根目录。
+```
+Gmail API
+    └─► fetch_emails.py   fetch & cache unread emails → emails.json
+             │
+             ├─► monitor.py      AI queue worker (rate-limited to 4 RPM)
+             │        └─► ai_agent.py   Gemini 2.5 Flash triage
+             │
+             └─► api.py          FastAPI REST backend
+                      ├─  GET  /api/contacts
+                      ├─  GET  /api/messages/{contact_id}
+                      ├─  POST /api/actions/mark-read
+                      ├─  POST /api/actions/refresh
+                      └─  GET  /api/stats
+```
 
-首次授权后会在本地生成：
-- `token.json`：访问令牌（请勿提交到仓库）
-- `emails.json`：邮件缓存（可提交也可不提交，按你的习惯）
+The React frontend (generated with Lovable) consumes the FastAPI layer — no direct file I/O from the browser.
 
-### 2) 安装依赖
+## Key Features
+
+- **Gemini-powered triage** — keeps school emails, professor messages, and important notices; archives LinkedIn spam, newsletters, and promotional mail automatically
+- **Buffer queue with rate-limiting** — processes one email every 15 s to stay within Gemini's free-tier 5 RPM cap; progress is persisted after every email so nothing is lost on a crash
+- **Clean REST API** — FastAPI backend with CORS enabled, ready for any frontend framework
+- **Conversational UI** — three-column layout (contacts / thread / AI analysis panel) styled after Spike and Linear
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| AI | Google Gemini 2.5 Flash (`google-genai`) |
+| Backend API | FastAPI + Uvicorn |
+| Email | Gmail API v1, OAuth 2.0 |
+| Frontend | React + Tailwind CSS (Lovable) |
+| Data store | Local `emails.json` (file-based cache) |
+
+## Quick Start
+
+### 1. Google credentials
+
+Create an OAuth 2.0 Client (Desktop app) in Google Cloud Console, download `credentials.json` to the project root, then run the one-time auth flow:
+
+```bash
+python auth.py
+```
+
+This generates `token.json`.
+
+### 2. Environment variables
+
+Create a `.env` file:
+
+```
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+
+### 3. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 3) 运行
+### 4. Run the backend API
 
 ```bash
-streamlit run app.py
+python api.py
+# API docs available at http://localhost:8000/docs
 ```
 
-打开网页后，点击侧边栏的「🔄 刷新收件箱」即可拉取最新邮件并刷新展示。
+### 5. Run the AI queue worker (separate terminal)
 
-## 常见问题
-### 找不到 `emails.json`
-这是正常的：第一次运行还没拉取过数据。直接在页面里点「🔄 刷新收件箱」即可生成。
+```bash
+python monitor.py
+```
 
-### 授权/拉取失败
-通常是以下原因：
-- `credentials.json` 没放在项目根目录
-- Google Cloud 项目的 OAuth 同意屏幕/测试用户没配置好
-- `token.json` 过期或权限变更（可以删除 `token.json` 重新授权）
+The worker fetches new emails, processes the pending queue through Gemini, and writes results back to `emails.json` in real time.
+
+## API Reference
+
+| Method | Endpoint | Description |
+|---|---|---|
+| GET | `/api/contacts` | All unique senders with initials, message count, pending flag |
+| GET | `/api/messages/{contact_id}` | All messages from one contact, newest first |
+| POST | `/api/actions/mark-read` | Remove Gmail UNREAD label (`{ "message_id": "..." }`) |
+| POST | `/api/actions/refresh` | Trigger a live Gmail fetch |
+| GET | `/api/stats` | Summary counts (total / pending / kept / cleaned) |
+
+## Triage Rules (System Instruction)
+
+Gemini is instructed to **always keep**:
+- Emails from `@unc.edu` / `@admissions.unc.edu`
+- Anything mentioning Canvas, CS, Statistics, BME Lab, or Research
+
+And to **archive**:
+- LinkedIn job alerts and marketing emails
+- Auto-generated weekly digests (Grammarly, Google, etc.)
+- Newsletters, promotions, and platform onboarding emails
