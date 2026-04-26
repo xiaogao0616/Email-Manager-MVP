@@ -224,12 +224,14 @@ def get_stats():
     total / pending / kept / cleaned / unique senders.
     """
     emails = [_normalize(e) for e in _load_emails()]
+    cleaned = sum(1 for e in emails if e["action"] == "read")
     return {
-        "total":   len(emails),
-        "pending": sum(1 for e in emails if e["action"] == "pending"),
-        "kept":    sum(1 for e in emails if e["action"] == "keep"),
-        "cleaned": sum(1 for e in emails if e["action"] == "read"),
-        "senders": len({_contact_id(e["sender"]) for e in emails}),
+        "total":    len(emails),
+        "pending":  sum(1 for e in emails if e["action"] == "pending"),
+        "kept":     sum(1 for e in emails if e["action"] == "keep"),
+        "cleaned":  cleaned,
+        "archived": cleaned,   # alias so frontends using either name both work
+        "senders":  len({_contact_id(e["sender"]) for e in emails}),
     }
 
 
