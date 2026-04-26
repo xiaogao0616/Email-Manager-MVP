@@ -1,6 +1,8 @@
 import json
+import os
 from datetime import datetime, timedelta
 from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
 
 # Hard cap: fetch at most 100 emails per call to prevent historical data floods
@@ -11,9 +13,25 @@ _DAYS_WINDOW = 7
 
 
 def _build_service():
-    """Load local token.json and return an authorized Gmail service object."""
-    creds = Credentials.from_authorized_user_file('token.json')
-    return build('gmail', 'v1', credentials=creds)
+    """
+    Return an authorized Gmail service object.
+
+    Credential resolution order:
+      1. GOOGLE_TOKEN_JSON env var (JSON string) — used on cloud hosts like Render
+      2. token.json file in the working directory  — used in local development
+    """
+    raw_json = os.environ.get("GOOGLE_TOKEN_JSON")
+    if raw_json:
+        token_data = json.loads(raw_json)
+        creds = Credentials.from_authorized_user_info(token_data)
+    else:
+        creds = Credentials.from_authorized_user_file("token.json")
+
+    # Refresh the access token if it has expired (refresh_token handles this silently)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+
+    return build("gmail", "v1", credentials=creds)
 
 
 def _load_existing_emails() -> dict:
